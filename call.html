@@ -2,74 +2,104 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Audio Call Simples</title>
+    <title>Audio P2P - Custom ID</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #121212; color: #eee; text-align: center; padding: 50px; }
-        input { padding: 10px; border-radius: 5px; border: none; }
-        button { padding: 10px 20px; cursor: pointer; background: #333; color: white; border: 1px solid #555; }
-        .status { margin-top: 20px; color: #888; }
+        body { font-family: 'Courier New', monospace; background: #0a0a0a; color: #00ff00; text-align: center; padding: 40px; }
+        .container { border: 2px solid #333; display: inline-block; padding: 20px; background: #111; }
+        input { background: #000; border: 1px solid #00ff00; color: #00ff00; padding: 8px; margin: 5px; outline: none; }
+        button { background: #00ff00; color: #000; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; }
+        button:hover { background: #00cc00; }
+        .status { margin-top: 15px; font-size: 0.9em; color: #888; }
+        #remote-audio { display: none; }
     </style>
 </head>
 <body>
 
-    <h2>Chamada de Áudio P2P</h2>
-    <p>Meu ID: <strong id="my-id">...</strong></p>
-    
-    <input type="text" id="peer-id" placeholder="Digite o ID do amigo">
-    <button onclick="fazerChamada()">Ligar</button>
+    <div class="container">
+        <h3>CONTROLE DE VOZ P2P</h3>
+        
+        <div>
+            <input type="text" id="my-custom-id" placeholder="Crie seu ID (ex: bryan)">
+            <button onclick="inicializarPeer()">Definir ID</button>
+        </div>
 
-    <div class="status" id="status">Aguardando conexão...</div>
+        <p>Status ID: <strong id="display-id">Não definido</strong></p>
+        <hr style="border: 0.5px solid #333">
+
+        <div>
+            <input type="text" id="peer-id" placeholder="ID do destino">
+            <button onclick="fazerChamada()">Conectar Áudio</button>
+        </div>
+
+        <div class="status" id="status">Aguardando definição de ID...</div>
+    </div>
 
     <audio id="remote-audio" autoplay></audio>
 
     <script>
-        // 1. Inicializa o Peer (Gera um ID aleatório)
-        const peer = new Peer();
+        let peer;
         let localStream;
 
-        // Exibe o ID gerado na tela
-        peer.on('open', (id) => {
-            document.getElementById('my-id').innerText = id;
-            document.getElementById('status').innerText = "Pronto para receber chamadas.";
-        });
-
-        // 2. Captura o microfone do usuário
-        navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+        // Captura o microfone assim que a página carrega
+        navigator.mediaDevices.getUserMedia({ audio: true })
             .then(stream => {
                 localStream = stream;
+                document.getElementById('status').innerText = "Microfone pronto. Defina seu ID.";
             })
             .catch(err => {
-                console.error("Erro ao acessar microfone:", err);
-                alert("Lembre-se de permitir o uso do microfone!");
+                document.getElementById('status').innerText = "Erro: Permita o microfone!";
             });
 
-        // 3. Lógica para RECEBER uma chamada
-        peer.on('call', (call) => {
-            document.getElementById('status').innerText = "Recebendo chamada...";
-            
-            // Atende a chamada enviando o nosso áudio
-            call.answer(localStream);
+        function inicializarPeer() {
+            const customId = document.getElementById('my-custom-id').value;
+            if (!customId) return alert("Digite um ID curto.");
 
-            // Quando receber o áudio da outra pessoa
-            call.on('stream', (remoteStream) => {
-                document.getElementById('remote-audio').srcObject = remoteStream;
-                document.getElementById('status').innerText = "Em chamada.";
+            // Inicializa o Peer com o ID que VOCÊ escolheu
+            peer = new Peer(customId);
+
+            peer.on('open', (id) => {
+                document.getElementById('display-id').innerText = id;
+                document.getElementById('status').innerText = "Online. Pronto para receber chamadas.";
             });
-        });
 
-        // 4. Lógica para INICIAR uma chamada
+            // LOGICA DE AUTO-ATENDIMENTO
+            peer.on('call', (call) => {
+                console.log("Recebendo chamada de:", call.peer);
+                document.getElementById('status').innerText = "Chamada recebida. Conectando...";
+                
+                // Atende automaticamente
+                call.answer(localStream);
+
+                call.on('stream', (remoteStream) => {
+                    const audio = document.getElementById('remote-audio');
+                    audio.srcObject = remoteStream;
+                    document.getElementById('status').innerText = "CONECTADO: Ouvindo " + call.peer;
+                });
+            });
+
+            peer.on('error', (err) => {
+                alert("Erro: Este ID já deve estar em uso ou é inválido.");
+                console.error(err);
+            });
+        }
+
         function fazerChamada() {
             const idDestino = document.getElementById('peer-id').value;
-            if (!idDestino) return alert("Insira um ID!");
+            if (!idDestino) return alert("Digite o ID de quem você quer ligar.");
 
-            document.getElementById('status').innerText = "Ligando...";
+            document.getElementById('status').innerText = "Tentando conectar com " + idDestino + "...";
             
             const call = peer.call(idDestino, localStream);
 
             call.on('stream', (remoteStream) => {
-                document.getElementById('remote-audio').srcObject = remoteStream;
-                document.getElementById('status').innerText = "Em chamada.";
+                const audio = document.getElementById('remote-audio');
+                audio.srcObject = remoteStream;
+                document.getElementById('status').innerText = "CONECTADO: Conversando com " + idDestino;
+            });
+
+            call.on('error', (err) => {
+                document.getElementById('status').innerText = "Falha na conexão.";
             });
         }
     </script>
