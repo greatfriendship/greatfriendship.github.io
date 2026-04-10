@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Audio Call Simples</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #121212; color: #eee; text-align: center; padding: 50px; }
+        input { padding: 10px; border-radius: 5px; border: none; }
+        button { padding: 10px 20px; cursor: pointer; background: #333; color: white; border: 1px solid #555; }
+        .status { margin-top: 20px; color: #888; }
+    </style>
+</head>
+<body>
+
+    <h2>Chamada de Áudio P2P</h2>
+    <p>Meu ID: <strong id="my-id">...</strong></p>
+    
+    <input type="text" id="peer-id" placeholder="Digite o ID do amigo">
+    <button onclick="fazerChamada()">Ligar</button>
+
+    <div class="status" id="status">Aguardando conexão...</div>
+
+    <audio id="remote-audio" autoplay></audio>
+
+    <script>
+        // 1. Inicializa o Peer (Gera um ID aleatório)
+        const peer = new Peer();
+        let localStream;
+
+        // Exibe o ID gerado na tela
+        peer.on('open', (id) => {
+            document.getElementById('my-id').innerText = id;
+            document.getElementById('status').innerText = "Pronto para receber chamadas.";
+        });
+
+        // 2. Captura o microfone do usuário
+        navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+            .then(stream => {
+                localStream = stream;
+            })
+            .catch(err => {
+                console.error("Erro ao acessar microfone:", err);
+                alert("Lembre-se de permitir o uso do microfone!");
+            });
+
+        // 3. Lógica para RECEBER uma chamada
+        peer.on('call', (call) => {
+            document.getElementById('status').innerText = "Recebendo chamada...";
+            
+            // Atende a chamada enviando o nosso áudio
+            call.answer(localStream);
+
+            // Quando receber o áudio da outra pessoa
+            call.on('stream', (remoteStream) => {
+                document.getElementById('remote-audio').srcObject = remoteStream;
+                document.getElementById('status').innerText = "Em chamada.";
+            });
+        });
+
+        // 4. Lógica para INICIAR uma chamada
+        function fazerChamada() {
+            const idDestino = document.getElementById('peer-id').value;
+            if (!idDestino) return alert("Insira um ID!");
+
+            document.getElementById('status').innerText = "Ligando...";
+            
+            const call = peer.call(idDestino, localStream);
+
+            call.on('stream', (remoteStream) => {
+                document.getElementById('remote-audio').srcObject = remoteStream;
+                document.getElementById('status').innerText = "Em chamada.";
+            });
+        }
+    </script>
+</body>
+</html>
