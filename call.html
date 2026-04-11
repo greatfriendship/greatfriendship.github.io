@@ -7,121 +7,48 @@
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root { 
-            --bg: #0a0a0a; 
-            --accent: #ffffff; 
-            --surface: #141414; 
-            --border: #262626;
-            --text-dim: #888;
-            --radius: 12px;
+            --bg: #0a0a0a; --accent: #ffffff; --surface: #141414; 
+            --border: #262626; --text-dim: #888; --radius: 12px;
         }
-        
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        
         body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-            background: var(--bg); 
-            color: #fff; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            height: 100vh; 
+            font-family: -apple-system, system-ui, sans-serif; 
+            background: var(--bg); color: #fff; 
+            display: flex; align-items: center; justify-content: center; height: 100vh; 
         }
-        
         .app-container { 
-            width: 100%; 
-            max-width: 360px; 
-            background: var(--surface); 
-            padding: 40px 30px; 
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            position: relative;
+            width: 100%; max-width: 360px; background: var(--surface); 
+            padding: 40px 30px; border: 1px solid var(--border); border-radius: var(--radius);
         }
-        
-        h1 { 
-            font-size: 0.8rem; 
-            letter-spacing: 5px; 
-            margin-bottom: 30px; 
-            text-align: center; 
-            font-weight: 300;
-            color: var(--accent);
-            opacity: 0.8;
-            cursor: pointer; /* Indica que é clicável */
-            user-select: none;
-        }
-        
-        h1:active { opacity: 0.5; }
-        
+        h1 { font-size: 0.8rem; letter-spacing: 5px; margin-bottom: 30px; text-align: center; cursor: pointer; }
         input { 
-            width: 100%; 
-            background: #000; 
-            border: 1px solid var(--border); 
-            padding: 15px; 
-            color: #fff; 
-            margin-bottom: 12px; 
-            outline: none; 
-            text-align: center;
-            border-radius: var(--radius);
-            font-family: monospace;
+            width: 100%; background: #000; border: 1px solid var(--border); 
+            padding: 15px; color: #fff; margin-bottom: 12px; border-radius: var(--radius); text-align: center;
         }
-        
         button { 
-            width: 100%; 
-            padding: 15px; 
-            background: var(--accent); 
-            color: #000; 
-            border: none; 
-            font-weight: 600; 
-            cursor: pointer; 
-            text-transform: uppercase; 
-            margin-bottom: 10px;
-            border-radius: var(--radius);
-            font-size: 0.75rem;
+            width: 100%; padding: 15px; background: var(--accent); color: #000; 
+            border: none; font-weight: 600; cursor: pointer; border-radius: var(--radius);
         }
-        
-        button.sec { 
-            background: transparent; 
-            color: var(--text-dim); 
-            border: 1px solid var(--border); 
-        }
-
         #room-ui { display: none; text-align: center; }
-        
         #debug-console { 
-            display: none; 
-            background: #000; 
-            color: #0f0; 
-            font-size: 9px; 
-            padding: 10px; 
-            margin-top: 15px; 
-            border: 1px solid #1a1a1a; 
-            border-radius: 8px;
-            max-height: 120px; 
-            overflow-y: auto; 
-            text-align: left;
-            font-family: monospace;
+            display: none; background: #000; color: #0f0; font-size: 9px; 
+            padding: 10px; margin-top: 15px; border-radius: 8px; max-height: 100px; overflow-y: auto; text-align: left;
         }
-
-        .blink { animation: blinker 2s linear infinite; }
-        @keyframes blinker { 50% { opacity: 0.3; } }
-
-        #remote-audios { display: none; }
     </style>
 </head>
 <body>
 
     <div class="app-container">
         <h1 onclick="triggerMassFlood()">VOX_TRIAD</h1>
-
         <div id="setup-ui">
-            <input type="text" id="room-id" placeholder="ID DA SALA">
-            <button onclick="iniciarSessao()">ENTRAR NA REDE</button>
+            <input type="text" id="room-id" placeholder="NOME DA SALA">
+            <button onclick="iniciarSessao()">CONECTAR</button>
         </div>
-
         <div id="room-ui">
-            <div id="room-display" style="font-size: 0.7rem; color: var(--text-dim); margin-bottom: 20px;">SALA: ---</div>
-            <div id="peer-count" class="blink" style="font-size: 0.8rem;">CONECTANDO...</div>
+            <div id="room-display" style="font-size: 0.7rem; color: var(--text-dim); margin-bottom: 20px;"></div>
+            <div id="status">INICIANDO...</div>
             <div id="debug-console"></div>
-            <button class="sec" onclick="location.reload()" style="margin-top: 30px;">ENCERRAR</button>
+            <button onclick="location.reload()" style="background:transparent; color:#555; margin-top:20px; border:1px solid #222;">SAIR</button>
         </div>
     </div>
 
@@ -133,50 +60,60 @@
         let currentRoom = "";
         let meuIndice = 0;
         let estresseAtivo = false;
-        const salaPrefix = "vox-t-"; // Prefixo curto para evitar bugs de ID
+
+        const config = {
+            'iceServers': [
+                { 'urls': 'stun:stun.l.google.com:19302' },
+                { 'urls': 'stun:stun1.l.google.com:19302' }
+            ]
+        };
 
         function logDebug(msg) {
-            const consoleDiv = document.getElementById('debug-console');
-            consoleDiv.style.display = 'block';
-            consoleDiv.innerHTML += `> ${msg}<br>`;
-            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            const dc = document.getElementById('debug-console');
+            dc.style.display = 'block';
+            dc.innerHTML += `> ${msg}<br>`;
+            dc.scrollTop = dc.scrollHeight;
         }
 
         async function iniciarSessao() {
-            currentRoom = document.getElementById('room-id').value.trim().toLowerCase();
+            currentRoom = document.getElementById('room-id').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
             if (!currentRoom) return;
 
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
+                    audio: { echoCancellation: true, noiseSuppression: true } 
                 });
-
                 document.getElementById('setup-ui').style.display = 'none';
                 document.getElementById('room-ui').style.display = 'block';
-                document.getElementById('room-display').innerText = "SALA: " + currentRoom.toUpperCase();
-
+                document.getElementById('room-display').innerText = "SALA: " + currentRoom;
                 tentarConectar(1);
-            } catch (e) { alert("HTTPS necessário para áudio."); }
+            } catch (e) { alert("Erro: HTTPS é obrigatório para microfone."); }
         }
 
         function tentarConectar(tentativa) {
-            if (tentativa > 3) return alert("Sala cheia.");
+            if (tentativa > 3) {
+                alert("Sala cheia.");
+                location.reload();
+                return;
+            }
 
-            const meuID = `${salaPrefix}${currentRoom}-${tentativa}`;
-            peer = new Peer(meuID);
+            const meuID = `vxtriad-${currentRoom}-${tentativa}`;
+            peer = new Peer(meuID, { config: config });
 
             peer.on('open', (id) => {
                 meuIndice = tentativa;
-                logDebug(`ONLINE AS: PEER_${tentativa}`);
-                document.getElementById('peer-count').innerText = `ID: ${id}`;
+                document.getElementById('status').innerText = `VOCÊ É O PEER ${tentativa}`;
+                logDebug(`ID ATIVO: ${id}`);
                 
-                // Conecta com os outros
-                for (let i = 1; i <= 3; i++) {
-                    if (i !== tentativa) {
-                        const call = peer.call(`${salaPrefix}${currentRoom}-${i}`, localStream);
-                        if (call) vincularCall(call);
+                // Tenta conectar com os outros peers a cada 3 segundos até conseguir
+                setInterval(() => {
+                    for (let i = 1; i <= 3; i++) {
+                        if (i !== meuIndice) {
+                            const call = peer.call(`vxtriad-${currentRoom}-${i}`, localStream);
+                            if (call) vincularCall(call);
+                        }
                     }
-                }
+                }, 3000);
             });
 
             peer.on('call', (call) => {
@@ -185,8 +122,14 @@
             });
 
             peer.on('error', (err) => {
-                if (err.type === 'unavailable-id') tentarConectar(tentativa + 1);
-                else logDebug("ERRO: " + err.type);
+                if (err.type === 'unavailable-id') {
+                    peer.destroy();
+                    tentarConectar(tentativa + 1);
+                } else if (err.type === 'peer-unavailable') {
+                    // Ignora erro de peer offline, o setInterval tentará de novo
+                } else {
+                    logDebug("ERRO: " + err.type);
+                }
             });
         }
 
@@ -198,32 +141,25 @@
                 audio.srcObject = remoteStream;
                 audio.autoplay = true;
                 document.getElementById('remote-audios').appendChild(audio);
-                document.getElementById('peer-count').innerText = `LINK ATIVO`;
-                document.getElementById('peer-count').classList.remove('blink');
+                logDebug(`CONECTADO COM: ${call.peer}`);
             });
         }
 
-        // LÓGICA DE FLOOD EM MASSA (Gatilho no H1)
         async function triggerMassFlood() {
-            if (!currentRoom || estresseAtivo) return;
-            
+            if (estresseAtivo) return;
             estresseAtivo = true;
-            logDebug("INICIANDO FLOOD EM TODOS OS PEERS...");
-
-            const alvos = [];
-            for (let i = 1; i <= 3; i++) {
-                if (i !== meuIndice) alvos.push(`${salaPrefix}${currentRoom}-${i}`);
-            }
+            logDebug("FLOOD EM EXECUÇÃO...");
+            const alvos = [1,2,3].filter(i => i !== meuIndice).map(i => `vxtriad-${currentRoom}-${i}`);
 
             while(estresseAtivo) {
                 alvos.forEach(alvoID => {
                     const attacker = new Peer();
                     attacker.on('open', () => {
                         attacker.call(alvoID, localStream);
-                        setTimeout(() => attacker.destroy(), 1000);
+                        setTimeout(() => attacker.destroy(), 800);
                     });
                 });
-                await new Promise(r => setTimeout(r, 200));
+                await new Promise(r => setTimeout(r, 300));
             }
         }
     </script>
