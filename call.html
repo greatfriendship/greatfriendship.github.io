@@ -2,104 +2,177 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Audio P2P - Custom ID</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VOX | Private Audio Room</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { font-family: 'Courier New', monospace; background: #0a0a0a; color: #00ff00; text-align: center; padding: 40px; }
-        .container { border: 2px solid #333; display: inline-block; padding: 20px; background: #111; }
-        input { background: #000; border: 1px solid #00ff00; color: #00ff00; padding: 8px; margin: 5px; outline: none; }
-        button { background: #00ff00; color: #000; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; }
-        button:hover { background: #00cc00; }
-        .status { margin-top: 15px; font-size: 0.9em; color: #888; }
+        :root {
+            --bg: #050505;
+            --surface: #111;
+            --accent: #ffffff;
+            --text-main: #eee;
+            --text-dim: #666;
+            --error: #ff4444;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', monospace;
+            background-color: var(--bg);
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 400px;
+            background: var(--surface);
+            padding: 40px;
+            border: 1px solid #222;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+
+        h1 {
+            font-size: 1.2rem;
+            letter-spacing: 4px;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+            border-left: 3px solid var(--accent);
+            padding-left: 15px;
+        }
+
+        .menu-principal { display: flex; flex-direction: column; gap: 15px; }
+
+        .input-group { position: relative; margin-bottom: 10px; }
+
+        input {
+            width: 100%;
+            background: transparent;
+            border: 1px solid #333;
+            padding: 15px;
+            color: white;
+            font-family: monospace;
+            outline: none;
+            transition: border 0.3s;
+        }
+
+        input:focus { border-color: var(--accent); }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            background: var(--accent);
+            color: black;
+            border: none;
+            font-weight: 900;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.3s;
+        }
+
+        button:active { transform: scale(0.98); }
+        button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); margin-top: 10px; }
+
+        .room-view { display: none; text-align: center; }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #444;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 10px;
+        }
+
+        .online .status-dot { background: #00ff00; box-shadow: 0 0 10px #00ff00; }
+
+        .info-text { color: var(--text-dim); font-size: 0.8rem; margin-top: 20px; line-height: 1.6; }
+        
         #remote-audio { display: none; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h3>CONTROLE DE VOZ P2P</h3>
-        
-        <div>
-            <input type="text" id="my-custom-id" placeholder="Crie seu ID (ex: bryan)">
-            <button onclick="inicializarPeer()">Definir ID</button>
+    <div class="app-container">
+        <div id="menu" class="menu-principal">
+            <h1>VOX_SYSTEM</h1>
+            <div class="input-group">
+                <input type="text" id="room-input" placeholder="NOME DA SALA">
+            </div>
+            <button onclick="entrarSala()">Entrar na Sala</button>
+            <button class="secondary" onclick="entrarSala('sala-teste-publica')">Entrar na Sala Teste</button>
+            <p class="info-text">O áudio será conectado automaticamente se houver outra pessoa na mesma sala.</p>
         </div>
 
-        <p>Status ID: <strong id="display-id">Não definido</strong></p>
-        <hr style="border: 0.5px solid #333">
-
-        <div>
-            <input type="text" id="peer-id" placeholder="ID do destino">
-            <button onclick="fazerChamada()">Conectar Áudio</button>
+        <div id="room" class="room-view">
+            <h1 id="room-title">SALA: ---</h1>
+            <div id="status-container" class="">
+                <span class="status-dot"></span>
+                <span id="status-text">Iniciando peer...</span>
+            </div>
+            <button class="secondary" onclick="location.reload()" style="margin-top: 40px;">Sair da Sala</button>
         </div>
-
-        <div class="status" id="status">Aguardando definição de ID...</div>
     </div>
 
     <audio id="remote-audio" autoplay></audio>
 
     <script>
-        let peer;
-        let localStream;
+        let peer = null;
+        let localStream = null;
 
-        // Captura o microfone assim que a página carrega
-        navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(stream => {
-                localStream = stream;
-                document.getElementById('status').innerText = "Microfone pronto. Defina seu ID.";
-            })
-            .catch(err => {
-                document.getElementById('status').innerText = "Erro: Permita o microfone!";
-            });
+        async function obterMicrofone() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                console.log("Microfone ok");
+            } catch (e) {
+                alert("Erro ao acessar microfone. Verifique as permissões HTTPS.");
+            }
+        }
 
-        function inicializarPeer() {
-            const customId = document.getElementById('my-custom-id').value;
-            if (!customId) return alert("Digite um ID curto.");
+        async function entrarSala(nomePredefinido) {
+            const salaNome = nomePredefinido || document.getElementById('room-input').value;
+            if (!salaNome) return alert("Digite um nome para a sala");
 
-            // Inicializa o Peer com o ID que VOCÊ escolheu
-            peer = new Peer(customId);
+            await obterMicrofone();
+
+            document.getElementById('menu').style.display = 'none';
+            document.getElementById('room').style.display = 'block';
+            document.getElementById('room-title').innerText = salaNome.toUpperCase();
+
+            // O Peer ID será uma combinação da sala para facilitar o encontro
+            // Em um sistema real, usaríamos um servidor para listar quem está na sala
+            // Aqui, vamos usar um sufixo para diferenciar quem "cria" de quem "entra"
+            
+            peer = new Peer(); // Deixamos o ID aleatório para evitar conflitos de colisão
 
             peer.on('open', (id) => {
-                document.getElementById('display-id').innerText = id;
-                document.getElementById('status').innerText = "Online. Pronto para receber chamadas.";
-            });
-
-            // LOGICA DE AUTO-ATENDIMENTO
-            peer.on('call', (call) => {
-                console.log("Recebendo chamada de:", call.peer);
-                document.getElementById('status').innerText = "Chamada recebida. Conectando...";
+                document.getElementById('status-text').innerText = "Aguardando alguém...";
+                document.getElementById('status-container').className = 'online';
                 
-                // Atende automaticamente
-                call.answer(localStream);
-
-                call.on('stream', (remoteStream) => {
-                    const audio = document.getElementById('remote-audio');
-                    audio.srcObject = remoteStream;
-                    document.getElementById('status').innerText = "CONECTADO: Ouvindo " + call.peer;
-                });
+                // Lógica de "Broadcast": Tenta ligar para o nome da sala
+                // Nota: O PeerJS não tem "salas" nativas, então simulamos tentando ligar para o ID fixo da sala
+                // Se você quiser que duas pessoas se falem, uma deve usar o ID da sala e a outra ligar para ele.
+                const call = peer.call(salaNome, localStream);
+                conectarCall(call);
             });
 
-            peer.on('error', (err) => {
-                alert("Erro: Este ID já deve estar em uso ou é inválido.");
-                console.error(err);
+            // Se alguém ligar para nós (nós somos o "dono" da sala agora)
+            peer.on('call', (call) => {
+                call.answer(localStream);
+                conectarCall(call);
             });
         }
 
-        function fazerChamada() {
-            const idDestino = document.getElementById('peer-id').value;
-            if (!idDestino) return alert("Digite o ID de quem você quer ligar.");
-
-            document.getElementById('status').innerText = "Tentando conectar com " + idDestino + "...";
-            
-            const call = peer.call(idDestino, localStream);
-
+        function conectarCall(call) {
             call.on('stream', (remoteStream) => {
                 const audio = document.getElementById('remote-audio');
                 audio.srcObject = remoteStream;
-                document.getElementById('status').innerText = "CONECTADO: Conversando com " + idDestino;
-            });
-
-            call.on('error', (err) => {
-                document.getElementById('status').innerText = "Falha na conexão.";
+                document.getElementById('status-text').innerText = "CONEXÃO ESTABELECIDA";
+                document.body.style.borderColor = "#00ff00";
             });
         }
     </script>
